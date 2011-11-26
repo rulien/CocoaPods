@@ -284,11 +284,8 @@ else
 
         project = Xcodeproj::Project.new(config.project_pods_root + 'Pods.xcodeproj')
         project.targets.each do |target|
-          #target.source_build_phase
           phase = target.buildPhases.find { |phase| phase.is_a?(Xcodeproj::Project::PBXSourcesBuildPhase) }
           files = phase.files.map(&:file).map(&:name)
-          p target.productName
-          p files
           case target.productName
           when 'Pods'
             files.should.include "ASIHTTPRequest.m"

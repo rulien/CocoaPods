@@ -28,6 +28,7 @@ module Pod
     # TODO This is just to work around a MacRuby bug
     def post_initialize
       @dependencies, @source_files, @resources, @clean_paths, @subspecs = [], [], [], [], []
+      @platform_specifics = {}
       @xcconfig = Xcodeproj::Config.new
     end
 
@@ -142,6 +143,11 @@ module Pod
     end
     attr_reader :subspecs
 
+    # Stores a block which can later be applied for a specific platform from `apply_platform`.
+    def on(platform, &block)
+      @platform_specifics[platform] = block
+    end
+
     # Not attributes
 
     include Config::Mixin
@@ -149,6 +155,13 @@ module Pod
     # This is assigned the other spec, of which this pod's source is a part, by
     # a Resolver.
     attr_accessor :part_of_specification
+
+    # Evaluates a block specific to the given platform, if there is one.
+    def apply_platform(platform)
+      if block = @platform_specifics[platform]
+        block.call
+      end
+    end
 
     def wrapper?
       source_files.empty? && !subspecs.empty?

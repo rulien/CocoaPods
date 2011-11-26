@@ -30,10 +30,10 @@ module Pod
       @context = Context.new
     end
 
-    def resolve(specification, top_level_dependencies = nil)
+    def resolve(podfile, dependencies = nil)
       @specs = {}
-      @top_level_specification = specification
-      find_dependency_sets(specification, top_level_dependencies)
+      @podfile = podfile
+      find_dependency_sets(@podfile, dependencies)
       @specs.values.sort_by(&:name).each do |spec|
         if spec.part_of_other_pod?
           # Specification doesn't need to know more about a context, so we assign
@@ -58,18 +58,20 @@ module Pod
           if dependency.subspec_dependency?
             spec = spec.subspec_by_name(dependency.name)
           end
-          validate_platform!(spec)
+
+          # See if the spec matches the platform of the project and let the spec
+          # load any platform specific settings.
+          if spec.platform.nil? || spec.platform == @podfile.platform
+            spec.apply_platform(@podfile.platform)
+          else
+            raise Informative, "The platform required by the Podfile (:#{@podfile.platform}) " \
+                               "does not match that of #{spec} (:#{spec.platform})"
+          end
+
           @specs[spec.name] = spec
           # And recursively load the dependencies of the spec.
           find_dependency_sets(spec)
         end
-      end
-    end
-
-    def validate_platform!(spec)
-      unless spec.platform.nil? || spec.platform == @top_level_specification.platform
-        raise Informative, "The platform required by the Podfile (:#{@top_level_specification.platform}) " \
-                           "does not match that of #{spec} (:#{spec.platform})"
       end
     end
   end
