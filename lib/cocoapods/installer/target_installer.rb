@@ -4,10 +4,10 @@ module Pod
       include Config::Mixin
       include Shared
 
-      attr_reader :podfile, :project, :definition, :target
+      attr_reader :podfile, :project, :definition, :resolver, :target
 
-      def initialize(podfile, project, definition)
-        @podfile, @project, @definition = podfile, project, definition
+      def initialize(podfile, project, definition, resolver)
+        @podfile, @project, @definition, @resolver = podfile, project, definition, resolver
       end
 
       def xcconfig
@@ -27,7 +27,7 @@ module Pod
       end
 
       def copy_resources_script
-        @copy_resources_script ||= Generator::CopyResourcesScript.new(build_specifications.map do |spec|
+        @copy_resources_script ||= Generator::CopyResourcesScript.new(activated_specifications.map do |spec|
           spec.expanded_resources
         end.flatten)
       end
@@ -37,7 +37,7 @@ module Pod
       end
 
       def bridge_support_generator
-        Generator::BridgeSupport.new(build_specifications.map do |spec|
+        Generator::BridgeSupport.new(activated_specifications.map do |spec|
           spec.header_files.map do |header|
             config.project_pods_root + header
           end
@@ -74,7 +74,7 @@ module Pod
         FileUtils.rm_r(headers_symlink_path_name, :secure => true) if File.exists?(headers_symlink_path_name)
 
         header_search_paths = []
-        build_specifications.each do |spec|
+        activated_specifications.each do |spec|
           xcconfig.merge!(spec.xcconfig)
           # Only add implementation files to the compile phase
           spec.implementation_files.each do |file|
@@ -97,6 +97,9 @@ module Pod
         end
         xcconfig.merge!('HEADER_SEARCH_PATHS' => header_search_paths.sort.uniq.join(" "))
 
+        # TODO remove this and the move_compile_phase_to_end! extension, which
+        # is no longer needed now that the headers are symlinked at `pod install` time.
+        #
         # Now that we have added all the source files and copy header phases,
         # move the compile build phase to the end, so that headers are copied
         # to the build products dir first, and thus Pod source files can enjoy

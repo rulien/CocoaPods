@@ -1,25 +1,5 @@
 require File.expand_path('../../spec_helper', __FILE__)
 
-class StubbedSet < Pod::Specification::Set
-  attr_accessor :stub_platform
-
-  def specification
-    spec = super
-    spec.platform = @stub_platform
-    spec
-  end
-end
-
-class StubbedResolver < Pod::Resolver
-  attr_accessor :stub_platform
-
-  def find_dependency_set(dependency)
-    set = StubbedSet.new(super.pod_dir)
-    set.stub_platform = @stub_platform
-    set
-  end
-end
-
 describe "Pod::Resolver" do
   before do
     Pod::Spec::Set.reset!
@@ -38,35 +18,50 @@ describe "Pod::Resolver" do
     Pod::Config.instance = @config_before
   end
 
+  it "has a ResolveContext which holds global state, such as cached specification sets" do
+    resolver = Pod::Resolver.new
+    resolver.resolve(@podfile)
+    resolver.context.sets.values.sort_by(&:name).should == [
+      Pod::Spec::Set.new(config.repos_dir + 'master/ASIHTTPRequest'),
+      Pod::Spec::Set.new(config.repos_dir + 'master/ASIWebPageRequest'),
+      Pod::Spec::Set.new(config.repos_dir + 'master/Reachability'),
+    ].sort_by(&:name)
+  end
+
   it "returns all specs needed for the dependency" do
-    specs = Pod::Resolver.new(@podfile).resolve
+    specs = Pod::Resolver.new.resolve(@podfile)
     specs.map(&:class).uniq.should == [Pod::Specification]
     specs.map(&:name).sort.should == %w{ ASIHTTPRequest ASIWebPageRequest Reachability }
   end
 
   it "does not raise if all dependencies match the platform of the root spec (Podfile)" do
-    resolver = Pod::Resolver.new(@podfile)
+    resolver = Pod::Resolver.new
 
     @podfile.platform :ios
-    lambda { resolver.resolve }.should.not.raise
+    lambda { resolver.resolve(@podfile) }.should.not.raise
     @podfile.platform :osx
-    lambda { resolver.resolve }.should.not.raise
+    lambda { resolver.resolve(@podfile) }.should.not.raise
   end
 
   it "raises once any of the dependencies does not match the platform of the root spec (Podfile)" do
-    resolver = StubbedResolver.new(config.rootspec)
+    resolver = Pod::Resolver.new
+    set = Pod::Spec::Set.new(config.repos_dir + 'master/ASIHTTPRequest')
+    resolver.context.sets['ASIHTTPRequest'] = set
+
+    def set.stub_platform=(platform); @stubbed_platform = platform; end
+    def set.specification; spec = super; spec.platform = @stubbed_platform; spec; end
 
     @podfile.platform :ios
-    resolver.stub_platform = :ios
-    lambda { resolver.resolve }.should.not.raise
-    resolver.stub_platform = :osx
-    lambda { resolver.resolve }.should.raise Pod::Informative
+    set.stub_platform = :ios
+    lambda { resolver.resolve(@podfile) }.should.not.raise
+    set.stub_platform = :osx
+    lambda { resolver.resolve(@podfile) }.should.raise Pod::Informative
 
     @podfile.platform :osx
-    resolver.stub_platform = :osx
-    lambda { resolver.resolve }.should.not.raise
-    resolver.stub_platform = :ios
-    lambda { resolver.resolve }.should.raise Pod::Informative
+    set.stub_platform = :osx
+    lambda { resolver.resolve(@podfile) }.should.not.raise
+    set.stub_platform = :ios
+    lambda { resolver.resolve(@podfile) }.should.raise Pod::Informative
   end
 
   it "resolves subspecs" do
@@ -76,8 +71,14 @@ describe "Pod::Resolver" do
       dependency 'RestKit/ObjectMapping'
     end
     config.rootspec = @podfile
-    resolver = Pod::Resolver.new(@podfile)
-    resolver.resolve.map(&:name).sort.should == %w{ LibComponentLogging-Core LibComponentLogging-NSLog RestKit RestKit/Network RestKit/ObjectMapping }
+    resolver = Pod::Resolver.new
+    resolver.resolve(@podfile).map(&:name).sort.should == %w{
+      LibComponentLogging-Core
+      LibComponentLogging-NSLog
+      RestKit
+      RestKit/Network
+      RestKit/ObjectMapping
+    }
   end
 end
 

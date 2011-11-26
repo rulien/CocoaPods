@@ -4,17 +4,19 @@ module Pod
 
     module Shared
       def dependent_specifications
-        @dependent_specifications ||= Resolver.new(@podfile, @definition ? @definition.dependencies : nil).resolve
+        @dependent_specifications ||= @resolver.resolve(@podfile, @definition ? @definition.dependencies : nil)
       end
 
-      def build_specifications
+      def activated_specifications
         dependent_specifications.reject do |spec|
-          spec.wrapper? || spec.defined_in_set.only_part_of_other_pod?
+          # Don't activate specs which are only wrappers of subspecs, or are
+          # share source with another pod but aren't activated themselves.
+          spec.wrapper? || @resolver.context.sets[spec.name].only_part_of_other_pod?
         end
       end
 
       def download_only_specifications
-        dependent_specifications - build_specifications
+        dependent_specifications - activated_specifications
       end
     end
 
@@ -23,6 +25,10 @@ module Pod
 
     def initialize(podfile)
       @podfile = podfile
+      # Both Installer and TargetInstaller use the same resolver, which means
+      # that dependencies across all targets are equal, even if they only use
+      # subsets of all dependencies.
+      @resolver = Resolver.new
     end
 
     def lock_file
@@ -32,10 +38,7 @@ module Pod
     def project
       return @project if @project
       @project = Xcodeproj::Project.for_platform(@podfile.platform)
-      # First we need to resolve dependencies across *all* targets, so that the
-      # same correct versions of pods are being used for all targets. This
-      # happens when we call `build_specifications'.
-      build_specifications.each do |spec|
+      activated_specifications.each do |spec|
         # Add all source files to the project grouped by pod
         group = @project.add_pod_group(spec.name)
         spec.expanded_source_files.each do |path|
@@ -49,12 +52,12 @@ module Pod
 
     def target_installers
       @target_installers ||= @podfile.target_definitions.values.map do |definition|
-        TargetInstaller.new(@podfile, project, definition) unless definition.empty?
+        TargetInstaller.new(@podfile, project, definition, @resolver) unless definition.empty?
       end.compact
     end
 
     def install_dependencies!
-      build_specifications.each do |spec|
+      activated_specifications.each do |spec|
         if spec.pod_destroot.exist?
           puts "Using #{spec}" unless config.silent?
         else
@@ -83,7 +86,7 @@ module Pod
       puts "* Running post install hooks" if config.verbose?
       # Post install hooks run _before_ saving of project, so that they can alter it before saving.
       target_installers.each do |target_installer|
-        target_installer.build_specifications.each { |spec| spec.post_install(target_installer) }
+        target_installer.activated_specifications.each { |spec| spec.post_install(target_installer) }
       end
       @podfile.post_install!(self)
 
@@ -95,7 +98,7 @@ module Pod
     def generate_lock_file!
       lock_file.open('w') do |file|
         file.puts "PODS:"
-        pods = build_specifications.map do |spec|
+        pods = activated_specifications.map do |spec|
           [spec.to_s, spec.dependencies.map(&:to_s).sort]
         end.sort_by(&:first).each do |name, deps|
           if deps.empty?

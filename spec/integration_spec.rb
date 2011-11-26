@@ -230,7 +230,7 @@ else
         end
 
         installer = SpecHelper::Installer.new(spec)
-        installer.target_installers.first.build_specifications.first.resources = 'LICEN*', 'Readme.*'
+        installer.target_installers.first.activated_specifications.first.resources = 'LICEN*', 'Readme.*'
         installer.install!
 
         contents = (config.project_pods_root + 'Pods-resources.sh').read

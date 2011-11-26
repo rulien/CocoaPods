@@ -1,6 +1,18 @@
 require File.expand_path('../../spec_helper', __FILE__)
 
 describe "Pod::Installer" do
+  before do
+    @config_before = config
+    Pod::Config.instance = nil
+    config.silent = true
+    config.repos_dir = fixture('spec-repos')
+    config.project_pods_root = fixture('integration')
+  end
+
+  after do
+    Pod::Config.instance = @config_before
+  end
+
   describe ", by default," do
     before do
       @xcconfig = Pod::Installer.new(Pod::Podfile.new do
@@ -19,18 +31,6 @@ describe "Pod::Installer" do
     end
   end
 
-  before do
-    @config_before = config
-    Pod::Config.instance = nil
-    config.silent = true
-    config.repos_dir = fixture('spec-repos')
-    config.project_pods_root = fixture('integration')
-  end
-
-  after do
-    Pod::Config.instance = @config_before
-  end
-
   it "generates a BridgeSupport metadata file from all the pod headers" do
     podfile = Pod::Podfile.new do
       platform :osx
@@ -39,7 +39,7 @@ describe "Pod::Installer" do
     config.rootspec = podfile
     expected = []
     installer = Pod::Installer.new(podfile)
-    installer.build_specifications.each do |spec|
+    installer.activated_specifications.each do |spec|
       spec.header_files.each do |header|
         expected << config.project_pods_root + header
       end
