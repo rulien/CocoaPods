@@ -1,54 +1,46 @@
 module Pod
   class Resolver
-    # A Resolver::Context caches specification sets and is used by the resolver
-    # to ensure that extra dependencies on a set are added to the same instance.
-    #
-    # In addition, the context is later on used by Specification to lookup other
-    # specs, like the on they are a part of.
-    class Context
-      attr_reader :sources, :sets
+    attr_reader :cached_sources, :cached_sets
 
-      def initialize
-        @sets = {}
-        @sources = Source::Aggregate.new
-      end
-
-      def find_dependency_set(dependency)
-        @sets[dependency.name] ||= begin
-          if external_spec = dependency.specification
-            Specification::Set::External.new(external_spec)
-          else
-            @sources.search(dependency)
-          end
-        end
-      end
-    end
-
-    attr_reader :context
-
-    def initialize
-      @context = Context.new
-    end
-
-    def resolve(podfile, dependencies = nil)
-      @specs = {}
+    def initialize(podfile)
       @podfile = podfile
+      @cached_sets = {}
+      @cached_sources = Source::Aggregate.new
+    end
+
+    # This method will start the lookup from the given dependencies, which are
+    # those required by a Podfile.
+    #
+    # It defaults to resolve the dependencies of the `@podfile`.
+    def resolve(dependencies = @podfile.dependencies)
+      # This holds the data for each `resolve` invocation.
+      @specs = {}
+      # Resolve
       find_dependency_sets(@podfile, dependencies)
+      # Sort result by name and associate `part_of` specs with the other.
       @specs.values.sort_by(&:name).each do |spec|
         if spec.part_of_other_pod?
-          # Specification doesn't need to know more about a context, so we assign
-          # the other specification, of which this pod is a part, to the spec.
-          spec.part_of_specification = @context.sets[spec.part_of.name].specification
+          spec.part_of_specification = @cached_sets[spec.part_of.name].specification
         end
       end
     end
 
     private
 
-    def find_dependency_sets(specification, dependencies = nil)
-      (dependencies || specification.dependencies).each do |dependency|
-        set = @context.find_dependency_set(dependency)
-        set.required_by(specification)
+    def find_cached_set(dependency)
+      @cached_sets[dependency.name] ||= begin
+        if external_spec = dependency.specification
+          Specification::Set::External.new(external_spec)
+        else
+          @cached_sources.search(dependency)
+        end
+      end
+    end
+
+    def find_dependency_sets(dependent_specification, dependencies)
+      dependencies.each do |dependency|
+        set = find_cached_set(dependency)
+        set.required_by(dependent_specification)
         # Ensure we don't resolve the same spec twice
         unless @specs.has_key?(dependency.name)
           # Get a reference to the spec that’s actually being loaded.
@@ -70,7 +62,7 @@ module Pod
 
           @specs[spec.name] = spec
           # And recursively load the dependencies of the spec.
-          find_dependency_sets(spec)
+          find_dependency_sets(spec, spec.dependencies)
         end
       end
     end

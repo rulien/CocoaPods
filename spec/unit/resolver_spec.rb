@@ -12,6 +12,7 @@ describe "Pod::Resolver" do
       dependency 'ASIWebPageRequest'
     end
     config.rootspec = @podfile
+    @resolver = Pod::Resolver.new(@podfile)
   end
 
   after do
@@ -19,9 +20,8 @@ describe "Pod::Resolver" do
   end
 
   it "has a ResolveContext which holds global state, such as cached specification sets" do
-    resolver = Pod::Resolver.new
-    resolver.resolve(@podfile)
-    resolver.context.sets.values.sort_by(&:name).should == [
+    @resolver.resolve
+    @resolver.cached_sets.values.sort_by(&:name).should == [
       Pod::Spec::Set.new(config.repos_dir + 'master/ASIHTTPRequest'),
       Pod::Spec::Set.new(config.repos_dir + 'master/ASIWebPageRequest'),
       Pod::Spec::Set.new(config.repos_dir + 'master/Reachability'),
@@ -29,39 +29,36 @@ describe "Pod::Resolver" do
   end
 
   it "returns all specs needed for the dependency" do
-    specs = Pod::Resolver.new.resolve(@podfile)
+    specs = @resolver.resolve
     specs.map(&:class).uniq.should == [Pod::Specification]
     specs.map(&:name).sort.should == %w{ ASIHTTPRequest ASIWebPageRequest Reachability }
   end
 
   it "does not raise if all dependencies match the platform of the root spec (Podfile)" do
-    resolver = Pod::Resolver.new
-
     @podfile.platform :ios
-    lambda { resolver.resolve(@podfile) }.should.not.raise
+    lambda { @resolver.resolve }.should.not.raise
     @podfile.platform :osx
-    lambda { resolver.resolve(@podfile) }.should.not.raise
+    lambda { @resolver.resolve }.should.not.raise
   end
 
   it "raises once any of the dependencies does not match the platform of the root spec (Podfile)" do
-    resolver = Pod::Resolver.new
     set = Pod::Spec::Set.new(config.repos_dir + 'master/ASIHTTPRequest')
-    resolver.context.sets['ASIHTTPRequest'] = set
+    @resolver.cached_sets['ASIHTTPRequest'] = set
 
     def set.stub_platform=(platform); @stubbed_platform = platform; end
     def set.specification; spec = super; spec.platform = @stubbed_platform; spec; end
 
     @podfile.platform :ios
     set.stub_platform = :ios
-    lambda { resolver.resolve(@podfile) }.should.not.raise
+    lambda { @resolver.resolve }.should.not.raise
     set.stub_platform = :osx
-    lambda { resolver.resolve(@podfile) }.should.raise Pod::Informative
+    lambda { @resolver.resolve }.should.raise Pod::Informative
 
     @podfile.platform :osx
     set.stub_platform = :osx
-    lambda { resolver.resolve(@podfile) }.should.not.raise
+    lambda { @resolver.resolve }.should.not.raise
     set.stub_platform = :ios
-    lambda { resolver.resolve(@podfile) }.should.raise Pod::Informative
+    lambda { @resolver.resolve }.should.raise Pod::Informative
   end
 
   it "resolves subspecs" do
@@ -71,8 +68,8 @@ describe "Pod::Resolver" do
       dependency 'RestKit/ObjectMapping'
     end
     config.rootspec = @podfile
-    resolver = Pod::Resolver.new
-    resolver.resolve(@podfile).map(&:name).sort.should == %w{
+    resolver = Pod::Resolver.new(@podfile)
+    resolver.resolve.map(&:name).sort.should == %w{
       LibComponentLogging-Core
       LibComponentLogging-NSLog
       RestKit

@@ -10,6 +10,10 @@ module Pod
         @podfile, @project, @definition, @resolver = podfile, project, definition, resolver
       end
 
+      def dependency_specifications
+        @dependency_specifications ||= @resolver.resolve(@definition.dependencies)
+      end
+
       def xcconfig
         @xcconfig ||= Xcodeproj::Config.new({
           # In a workspace this is where the static library headers should be found.

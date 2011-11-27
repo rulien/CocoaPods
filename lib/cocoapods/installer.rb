@@ -3,20 +3,16 @@ module Pod
     autoload :TargetInstaller, 'cocoapods/installer/target_installer'
 
     module Shared
-      def dependent_specifications
-        @dependent_specifications ||= @resolver.resolve(@podfile, @definition ? @definition.dependencies : nil)
-      end
-
       def activated_specifications
-        dependent_specifications.reject do |spec|
+        dependency_specifications.reject do |spec|
           # Don't activate specs which are only wrappers of subspecs, or are
           # share source with another pod but aren't activated themselves.
-          spec.wrapper? || @resolver.context.sets[spec.name].only_part_of_other_pod?
+          spec.wrapper? || @resolver.cached_sets[spec.name].only_part_of_other_pod?
         end
       end
 
       def download_only_specifications
-        dependent_specifications - activated_specifications
+        dependency_specifications - activated_specifications
       end
     end
 
@@ -28,11 +24,16 @@ module Pod
       # Both Installer and TargetInstaller use the same resolver, which means
       # that dependencies across all targets are equal, even if they only use
       # subsets of all dependencies.
-      @resolver = Resolver.new
+      @resolver = Resolver.new(@podfile)
     end
 
     def lock_file
       config.project_root + 'Podfile.lock'
+    end
+
+    def dependency_specifications
+      # Resolve *all* dependencies first.
+      @dependency_specifications ||= @resolver.resolve
     end
 
     def project
