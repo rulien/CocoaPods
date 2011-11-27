@@ -32,7 +32,7 @@ module Pod
 
       def copy_resources_script
         @copy_resources_script ||= Generator::CopyResourcesScript.new(activated_specifications.map do |spec|
-          spec.expanded_resources
+          spec.paths(config.project_pods_root).expanded_resources
         end.flatten)
       end
 
@@ -42,7 +42,7 @@ module Pod
 
       def bridge_support_generator
         Generator::BridgeSupport.new(activated_specifications.map do |spec|
-          spec.header_files.map do |header|
+          spec.paths(config.project_pods_root).header_files.map do |header|
             config.project_pods_root + header
           end
         end.flatten)
@@ -81,11 +81,11 @@ module Pod
         activated_specifications.each do |spec|
           xcconfig.merge!(spec.xcconfig)
           # Only add implementation files to the compile phase
-          spec.implementation_files.each do |file|
+          spec.paths(config.project_pods_root).implementation_files.each do |file|
             @target.add_source_file(file, nil, spec.compiler_flags)
           end
           # Symlink header files to Pods/Headers
-          spec.copy_header_mappings.each do |header_dir, files|
+          spec.paths(config.project_pods_root).copy_header_mappings.each do |header_dir, files|
             target_dir = "#{headers_symlink_path_name}/#{header_dir}"
             FileUtils.mkdir_p(target_dir)
             target_dir_real_path = Pathname.new(target_dir).realpath
@@ -97,7 +97,7 @@ module Pod
             end
           end
           # Collect all header search paths
-          header_search_paths.concat(spec.header_search_paths)
+          header_search_paths.concat(spec.paths(config.project_pods_root).header_search_paths)
         end
         xcconfig.merge!('HEADER_SEARCH_PATHS' => header_search_paths.sort.uniq.join(" "))
 

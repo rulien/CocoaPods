@@ -42,7 +42,7 @@ module Pod
       activated_specifications.each do |spec|
         # Add all source files to the project grouped by pod
         group = @project.add_pod_group(spec.name)
-        spec.expanded_source_files.each do |path|
+        spec.paths(config.project_pods_root).expanded_source_files.each do |path|
           group.children.new('path' => path.to_s)
         end
       end
@@ -59,15 +59,15 @@ module Pod
 
     def install_dependencies!
       activated_specifications.each do |spec|
-        if spec.pod_destroot.exist?
+        if spec.paths(config.project_pods_root).pod_destroot.exist?
           puts "Using #{spec}" unless config.silent?
         else
           puts "Installing #{spec}" unless config.silent?
           spec = spec.part_of_specification if spec.part_of_other_pod?
-          downloader = Downloader.for_source(spec.pod_destroot, spec.source)
+          downloader = Downloader.for_source(spec.paths(config.project_pods_root).pod_destroot, spec.source)
           downloader.download
           # TODO move cleaning into the installer as well
-          downloader.clean(spec.expanded_clean_paths) if config.clean
+          downloader.clean(spec.paths(config.project_pods_root).expanded_clean_paths) if config.clean
         end
       end
     end

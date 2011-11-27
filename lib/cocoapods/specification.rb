@@ -1,6 +1,4 @@
 module Pod
-  extend Config::Mixin
-
   def self._eval_podspec(path)
     eval(path.read, nil, path.to_s)
   end
@@ -150,8 +148,6 @@ module Pod
 
     # Not attributes
 
-    include Config::Mixin
-
     # This is assigned the other spec, of which this pod's source is a part, by
     # a Resolver.
     attr_accessor :part_of_specification
@@ -191,17 +187,11 @@ module Pod
       @dependencies.find { |d| d.top_level_spec_name == name }
     end
 
-    def pod_destroot
-      if part_of_other_pod?
-        part_of_specification.pod_destroot
-      else
-        config.project_pods_root + @name
-      end
-    end
-
     def pod_destroot_name
-      if root = pod_destroot
-        root.basename
+      if part_of_other_pod?
+        part_of_specification.pod_destroot_name
+      else
+        Pathname.new(@name)
       end
     end
 
@@ -221,85 +211,103 @@ module Pod
       end
     end
 
-    # Returns all resource files of this pod, but relative to the
-    # project pods root.
-    def expanded_resources
-      files = []
-      resources.each do |pattern|
-        pattern = pod_destroot + pattern
-        pattern.glob.each do |file|
-          files << file.relative_path_from(config.project_pods_root)
+    # Returns a PathResolver instance which returns paths, defined in a
+    # Specification, expanded against a specific path (the pods root).
+    def path_resolver(pods_root)
+      PathResolver.new(self, pods_root)
+    end
+    alias_method :paths, :path_resolver # TODO clean
+
+    class PathResolver
+      def initialize(specification, pods_root)
+        @specification, @pods_root = specification, pods_root
+      end
+
+      def pod_destroot
+        @pods_root + @specification.pod_destroot_name
+      end
+
+      # Returns all resource files of this pod, but relative to the
+      # project pods root.
+      def expanded_resources
+        files = []
+        @specification.resources.each do |pattern|
+          pattern = pod_destroot + pattern
+          pattern.glob.each do |file|
+            # TODO really needed?
+            files << file.relative_path_from(@pods_root)
+          end
+        end
+        files
+      end
+
+      # Returns full paths to clean for this pod.
+      def expanded_clean_paths
+        files = []
+        @specification.clean_paths.each do |pattern|
+          pattern = pod_destroot + pattern
+          pattern.glob.each do |file|
+            files << file
+          end
+        end
+        files
+      end
+
+      # Returns all source files of this pod including header files,
+      # but relative to the project pods root.
+      #
+      # If the pattern is the path to a directory, the pattern will
+      # automatically glob for c, c++, Objective-C, and Objective-C++
+      # files.
+      def expanded_source_files
+        files = []
+        @specification.source_files.each do |pattern|
+          pattern = pod_destroot + pattern
+          pattern = pattern + '*.{h,m,mm,c,cpp}' if pattern.directory?
+          pattern.glob.each do |file|
+            files << file.relative_path_from(@pods_root)
+          end
+        end
+        files
+      end
+
+      def implementation_files
+        expanded_source_files.select { |f| f.extname != '.h' }
+      end
+
+      # Returns only the header files of this pod.
+      def header_files
+        expanded_source_files.select { |f| f.extname == '.h' }
+      end
+
+      # This method takes a header path and returns the location it should have
+      # in the pod's header dir.
+      #
+      # By default all headers are copied to the pod's header dir without any
+      # namespacing. You can, however, override this method in the podspec, or
+      # copy_header_mappings for full control.
+      def copy_header_mapping(from)
+        from.basename
+      end
+
+      # See copy_header_mapping.
+      def copy_header_mappings
+        header_files.inject({}) do |mappings, from|
+          from_without_prefix = from.relative_path_from(@specification.pod_destroot_name)
+          to = @specification.header_dir + copy_header_mapping(from_without_prefix)
+          (mappings[to.dirname] ||= []) << from
+          mappings
         end
       end
-      files
-    end
 
-    # Returns full paths to clean for this pod.
-    def expanded_clean_paths
-      files = []
-      clean_paths.each do |pattern|
-        pattern = pod_destroot + pattern
-        pattern.glob.each do |file|
-          files << file
-        end
+      # Returns a list of search paths where the pod's headers can be found. This
+      # includes the pod's header dir root and any other directories that might
+      # have been added by overriding the copy_header_mapping/copy_header_mappings
+      # methods.
+      def header_search_paths
+        dirs = [@specification.header_dir] + copy_header_mappings.keys
+        dirs.map { |dir| %{"$(PODS_ROOT)/Headers/#{dir}"} }
       end
-      files
-    end
-
-    # Returns all source files of this pod including header files,
-    # but relative to the project pods root.
-    #
-    # If the pattern is the path to a directory, the pattern will
-    # automatically glob for c, c++, Objective-C, and Objective-C++
-    # files.
-    def expanded_source_files
-      files = []
-      source_files.each do |pattern|
-        pattern = pod_destroot + pattern
-        pattern = pattern + '*.{h,m,mm,c,cpp}' if pattern.directory?
-        pattern.glob.each do |file|
-          files << file.relative_path_from(config.project_pods_root)
-        end
-      end
-      files
-    end
-
-    def implementation_files
-      expanded_source_files.select { |f| f.extname != '.h' }
-    end
-
-    # Returns only the header files of this pod.
-    def header_files
-      expanded_source_files.select { |f| f.extname == '.h' }
-    end
-
-    # This method takes a header path and returns the location it should have
-    # in the pod's header dir.
-    #
-    # By default all headers are copied to the pod's header dir without any
-    # namespacing. You can, however, override this method in the podspec, or
-    # copy_header_mappings for full control.
-    def copy_header_mapping(from)
-      from.basename
-    end
-
-    # See copy_header_mapping.
-    def copy_header_mappings
-      header_files.inject({}) do |mappings, from|
-        from_without_prefix = from.relative_path_from(pod_destroot_name)
-        to = header_dir + copy_header_mapping(from_without_prefix)
-        (mappings[to.dirname] ||= []) << from
-        mappings
-      end
-    end
-
-    # Returns a list of search paths where the pod's headers can be found. This
-    # includes the pod's header dir root and any other directories that might
-    # have been added by overriding the copy_header_mapping/copy_header_mappings
-    # methods.
-    def header_search_paths
-      dirs = [header_dir] + copy_header_mappings.keys
-      dirs.map { |dir| %{"$(PODS_ROOT)/Headers/#{dir}"} }
     end
 
     def to_s

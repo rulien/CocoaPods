@@ -40,7 +40,7 @@ describe "Pod::Installer" do
     expected = []
     installer = Pod::Installer.new(podfile)
     installer.activated_specifications.each do |spec|
-      spec.header_files.each do |header|
+      spec.paths(config.project_pods_root).header_files.each do |header|
         expected << config.project_pods_root + header
       end
     end

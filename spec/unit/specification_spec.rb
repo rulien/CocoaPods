@@ -15,7 +15,7 @@ describe "A Pod::Specification loaded from a podspec" do
   end
 
   it "returns the directory where the pod should be checked out to" do
-    @spec.pod_destroot.should == config.project_pods_root + 'BananaLib'
+    @spec.paths(config.project_pods_root).pod_destroot.should == config.project_pods_root + 'BananaLib'
   end
 
   it "returns the pod's name" do
@@ -150,24 +150,25 @@ describe "A Pod::Specification, with installed source," do
   it "returns the list of files that the source_files pattern expand to" do
     files = @destroot.glob('**/*.{h,c,m}')
     files = files.map { |file| file.relative_path_from(config.project_pods_root) }
-    @spec.expanded_source_files.sort.should == files.sort
+    @spec.paths(config.project_pods_root).expanded_source_files.sort.should == files.sort
   end
 
   it "returns the list of headers" do
     files = @destroot.glob('**/*.h')
     files = files.map { |file| file.relative_path_from(config.project_pods_root) }
-    @spec.header_files.sort.should == files.sort
+    @spec.paths(config.project_pods_root).header_files.sort.should == files.sort
   end
 
   it "returns the list of implementation files" do
     files = @destroot.glob('**/*.{c,m}')
     files = files.map { |file| file.relative_path_from(config.project_pods_root) }
-    @spec.implementation_files.sort.should == files.sort
+    @spec.paths(config.project_pods_root).implementation_files.sort.should == files.sort
   end
 
   it "returns a hash of mappings from the pod's destroot to its header dirs, which by default is just the pod's header dir" do
-    @spec.copy_header_mappings.size.should == 1
-    @spec.copy_header_mappings[Pathname.new('SSZipArchive')].sort.should == %w{
+    paths = @spec.paths(config.project_pods_root)
+    paths.copy_header_mappings.size.should == 1
+    paths.copy_header_mappings[Pathname.new('SSZipArchive')].sort.should == %w{
       SSZipArchive.h
       minizip/crypt.h
       minizip/ioapi.h
@@ -178,11 +179,12 @@ describe "A Pod::Specification, with installed source," do
   end
 
   it "allows for customization of header mappings by overriding copy_header_mapping" do
-    def @spec.copy_header_mapping(from)
+    paths = @spec.paths(config.project_pods_root)
+    def paths.copy_header_mapping(from)
       Pathname.new('ns') + from.basename
     end
-    @spec.copy_header_mappings.size.should == 1
-    @spec.copy_header_mappings[Pathname.new('SSZipArchive/ns')].sort.should == %w{
+    paths.copy_header_mappings.size.should == 1
+    paths.copy_header_mappings[Pathname.new('SSZipArchive/ns')].sort.should == %w{
       SSZipArchive.h
       minizip/crypt.h
       minizip/ioapi.h
@@ -194,7 +196,8 @@ describe "A Pod::Specification, with installed source," do
 
   it "returns a hash of mappings with a custom header dir prefix" do
     @spec.header_dir = 'AnotherRoot'
-    @spec.copy_header_mappings[Pathname.new('AnotherRoot')].sort.should == %w{
+    paths = @spec.paths(config.project_pods_root)
+    paths.copy_header_mappings[Pathname.new('AnotherRoot')].sort.should == %w{
       SSZipArchive.h
       minizip/crypt.h
       minizip/ioapi.h
@@ -205,10 +208,11 @@ describe "A Pod::Specification, with installed source," do
   end
 
   it "returns the user header search paths" do
-    def @spec.copy_header_mapping(from)
+    paths = @spec.paths(config.project_pods_root)
+    def paths.copy_header_mapping(from)
       Pathname.new('ns') + from.basename
     end
-    @spec.header_search_paths.should == %w{
+    paths.header_search_paths.should == %w{
       "$(PODS_ROOT)/Headers/SSZipArchive"
       "$(PODS_ROOT)/Headers/SSZipArchive/ns"
     }
@@ -216,21 +220,23 @@ describe "A Pod::Specification, with installed source," do
 
   it "returns the user header search paths with a custom header dir prefix" do
     @spec.header_dir = 'AnotherRoot'
-    def @spec.copy_header_mapping(from)
+    paths = @spec.paths(config.project_pods_root)
+    def paths.copy_header_mapping(from)
       Pathname.new('ns') + from.basename
     end
-    @spec.header_search_paths.should == %w{
+    paths.header_search_paths.should == %w{
       "$(PODS_ROOT)/Headers/AnotherRoot"
       "$(PODS_ROOT)/Headers/AnotherRoot/ns"
     }
   end
 
   it "returns the list of files that the resources pattern expand to" do
-    @spec.expanded_resources.should == []
+    paths = @spec.paths(config.project_pods_root)
+    paths.expanded_resources.should == []
     @spec.resource = 'LICEN*'
-    @spec.expanded_resources.map(&:to_s).should == %w{ SSZipArchive/LICENSE }
+    paths.expanded_resources.map(&:to_s).should == %w{ SSZipArchive/LICENSE }
     @spec.resources = 'LICEN*', 'Readme.*'
-    @spec.expanded_resources.map(&:to_s).should == %w{ SSZipArchive/LICENSE SSZipArchive/Readme.markdown }
+    paths.expanded_resources.map(&:to_s).should == %w{ SSZipArchive/LICENSE SSZipArchive/Readme.markdown }
   end
 end
 
