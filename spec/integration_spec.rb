@@ -30,8 +30,6 @@ else
       extend SpecHelper::TemporaryDirectory
 
       before do
-        Pod::Source.reset!
-        Pod::Spec::Set.reset!
         fixture('spec-repos/master') # ensure the archive is unpacked
 
         @config_before = config
@@ -250,8 +248,6 @@ else
         installer = SpecHelper::Installer.new(spec)
         installer.install!
 
-        Pod::Source.reset!
-        Pod::Spec::Set.reset!
         spec = Pod::Podfile.new do
           # first ensure that the correct info is available to the specs when they load
           config.rootspec = self
@@ -267,9 +263,6 @@ else
       end
 
       it "creates a project with multiple targets" do
-        Pod::Source.reset!
-        Pod::Spec::Set.reset!
-
         podfile = Pod::Podfile.new do
           # first ensure that the correct info is available to the specs when they load
           config.rootspec = self
