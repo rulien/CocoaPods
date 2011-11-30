@@ -211,6 +211,16 @@ module Pod
       end
     end
 
+    # This method takes a header path and returns the location it should have
+    # in the pod's header dir.
+    #
+    # By default all headers are copied to the pod's header dir without any
+    # namespacing. You can, however, override this method in the podspec for
+    # full control.
+    def copy_header_mapping(from)
+      from.basename
+    end
+
     # Returns a PathResolver instance which returns paths, defined in a
     # Specification, expanded against a specific path (the pods root).
     def path_resolver(pods_root)
@@ -280,21 +290,12 @@ module Pod
         expanded_source_files.select { |f| f.extname == '.h' }
       end
 
-      # This method takes a header path and returns the location it should have
-      # in the pod's header dir.
-      #
-      # By default all headers are copied to the pod's header dir without any
-      # namespacing. You can, however, override this method in the podspec, or
-      # copy_header_mappings for full control.
-      def copy_header_mapping(from)
-        from.basename
-      end
 
       # See copy_header_mapping.
       def copy_header_mappings
         header_files.inject({}) do |mappings, from|
           from_without_prefix = from.relative_path_from(@specification.pod_destroot_name)
-          to = @specification.header_dir + copy_header_mapping(from_without_prefix)
+          to = @specification.header_dir + @specification.copy_header_mapping(from_without_prefix)
           (mappings[to.dirname] ||= []) << from
           mappings
         end
