@@ -77,7 +77,8 @@ namespace :gem do
   end
 
   desc "Run all specs, build and install gem, commit version change, tag version change, and push everything"
-  task :release do
+  task :release => :build do
+
     unless ENV['SKIP_CHECKS']
       if `git symbolic-ref HEAD 2>/dev/null`.strip.split('/').last != 'master'
         $stderr.puts "[!] You need to be on the `master' branch in order to be able to do a release."
@@ -128,11 +129,11 @@ namespace :gem do
     silent_sh "rm -rf '#{tmp}'"
     silent_sh "gem install --install-dir='#{tmp_gems}' #{gem_filename}"
 
-    puts "* Building examples from gem (tmp/gems)"
-    ENV['GEM_HOME'] = ENV['GEM_PATH'] = tmp_gems
-    ENV['PATH']     = "#{tmp_gems}/bin:#{ENV['PATH']}"
-    ENV['FROM_GEM'] = '1'
-    silent_sh "rake examples:build"
+    # puts "* Building examples from gem (tmp/gems)"
+    # ENV['GEM_HOME'] = ENV['GEM_PATH'] = tmp_gems
+    # ENV['PATH']     = "#{tmp_gems}/bin:#{ENV['PATH']}"
+    # ENV['FROM_GEM'] = '1'
+    # silent_sh "rake examples:build"
 
     # Then release
     sh "git commit lib/cocoapods.rb -m 'Release #{gem_version}'"
@@ -140,6 +141,29 @@ namespace :gem do
     sh "git push origin master"
     sh "git push origin --tags"
     sh "gem push #{gem_filename}"
+
+    # Update the last version in CocoaPods-version.yml
+    puts "* Updating last known version in Specs repo"
+    specs_branch = '0.6'
+    Dir.chdir('../Specs') do
+      puts Dir.pwd
+      sh "git checkout #{specs_branch}"
+      sh "git pull"
+
+      yaml_file  = 'CocoaPods-version.yml'
+      unless File.exist?(yaml_file)
+        $stderr.puts "[!] Unable to find #{yaml_file}!"
+        exit 1
+      end
+      cocoapods_version = YAML.load_file(yaml_file)
+      cocoapods_version['last'] = gem_version
+      File.open(yaml_file, "w") do |f|
+        f.write(cocoapods_version.to_yaml)
+      end
+
+      sh "git commit #{yaml_file} -m 'CocoaPods release #{gem_version}'"
+      sh "git push"
+    end
   end
 end
 
@@ -186,7 +210,7 @@ namespace :spec do
       sh "cd #{File.dirname(tarball)} && rm #{basename} && tar -zcf #{basename} #{basename[0..-8]}"
     end
   end
-  
+
   desc "Unpacks all the fixture tarballs"
   task :unpack_fixture_tarballs do
     tarballs = FileList['spec/fixtures/**/*.tar.gz']
